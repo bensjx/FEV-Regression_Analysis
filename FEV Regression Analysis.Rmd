@@ -1,0 +1,266 @@
+---
+title: "FEV prediction with regression analysis"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+# Load data
+fev_data = read.csv("FEV.csv", header=TRUE)
+```
+
+```{r}
+# Summary statistics
+summary(fev_data)
+```
+
+```{r}
+# Removing irrelevant columns
+new_fev_data = subset(fev_data, select = c('FEV','Age','Hgt_m','Sex','Smoke'))
+```
+
+```{r}
+# Visualising the data
+# Matrix plot + Scatter plot
+# from https://www.math.ucla.edu/~anderson/rw1001/library/base/html/pairs.html
+panel.cor = function(x, y, digits=3, prefix="", cex.cor)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits=digits)[1]
+    txt <- paste(prefix, txt, sep="")
+    if(missing(cex.cor)) cex <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex * r) 
+}
+pairs(~FEV+Age+Hgt_m, data=new_fev_data, main="Scatterplot Matrix", lower.panel = panel.cor)
+
+```
+
+```{r}
+# Boxplot
+library(purrr)
+library(tidyr)
+library(ggplot2)
+new_fev_data %>% # Pipeline our data
+  keep(c(TRUE,TRUE,TRUE,FALSE,FALSE)) %>% # Choose only first 3 variables
+  gather() %>%  # Convert to key value pair
+  ggplot() + # Plotting the value with ggplot2
+    facet_wrap(~ key, scales = "free") + # Plot multiple panels
+    geom_boxplot(aes(y=value,group=key)) # Scatter plot
+```
+
+```{r}
+# Histogram
+new_fev_data %>% # Pipeline our data
+  keep(is.numeric) %>% # Choose only variables that are numeric
+  gather() %>%  # Convert to key value pair
+  ggplot() + # Plotting the value with ggplot2
+    facet_wrap(~ key, scales = "free") + # Plot multiple panels
+    geom_histogram(aes(value)) # Histogram
+```
+
+```{r}
+# Normal probability plot
+par(mfrow=c(1,3))
+qqnorm(new_fev_data$FEV, datax=TRUE, xlab = 'z-score',ylab='FEV')
+qqline(new_fev_data$FEV, datax=TRUE, xlab = 'z-score',ylab='FEV')
+
+qqnorm(new_fev_data$Age, datax=TRUE, xlab = 'z-score',ylab='Age')
+qqline(new_fev_data$Age, datax=TRUE, xlab = 'z-score',ylab='Age')
+
+qqnorm(new_fev_data$Hgt_m, datax=TRUE, xlab = 'z-score',ylab='Hgt_m')
+qqline(new_fev_data$Hgt_m, datax=TRUE, xlab = 'z-score',ylab='Hgt_m')
+par(mfrow=c(1,1))
+```
+
+```{r}
+shapiro.test(new_fev_data$FEV)
+shapiro.test(new_fev_data$Age)
+shapiro.test(new_fev_data$Hgt_m)
+```
+
+```{r}
+# Standardizing variables with unit normal scaling
+Age_standardized = (new_fev_data$Age - mean(new_fev_data$Age))/sd(new_fev_data$Age)
+Hgt_m_standardized = (new_fev_data$Hgt_m - mean(new_fev_data$Hgt_m))/sd(new_fev_data$Hgt_m)
+```
+
+```{r}
+# Build basic model
+sex_factor = as.factor(new_fev_data$Sex)
+smoke_factor = as.factor(new_fev_data$Smoke)
+
+# Build model
+model_basic = lm(new_fev_data$FEV~Age_standardized+Hgt_m_standardized+sex_factor+smoke_factor)
+
+# Summary of model
+summary(model_basic)
+
+# Anova table
+anova(model_basic)
+
+par(mfrow=c(2,2))
+# fitted values v.s. standardized residuals
+plot(model_basic$fitted.values,rstandard(model_basic))
+abline(h=0)
+
+# Age v.s. standardized residuals
+plot(new_fev_data$Age,rstandard(model_basic))
+abline(h=0)
+
+# Hgt_m v.s. standardized residuals
+plot(new_fev_data$Hgt_m,rstandard(model_basic))
+abline(h=0)
+
+qqnorm(rstandard(model_basic), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+qqline(rstandard(model_basic), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+par(mfrow=c(1,1))
+```
+
+```{r}
+# Interaction between Age and Height
+model_interaction = lm(new_fev_data$FEV~Age_standardized+Hgt_m_standardized+sex_factor+smoke_factor+Age_standardized*Hgt_m_standardized)
+
+# Summary of model
+summary(model_interaction)
+
+# Anova table
+anova(model_interaction)
+
+par(mfrow=c(2,2))
+# fitted values v.s. standardized residuals
+plot(model_interaction$fitted.values,rstandard(model_interaction))
+abline(h=0)
+
+# Age v.s. standardized residuals
+plot(new_fev_data$Age,rstandard(model_interaction))
+abline(h=0)
+
+# Hgt_m v.s. standardized residuals
+plot(new_fev_data$Hgt_m,rstandard(model_interaction))
+abline(h=0)
+
+qqnorm(rstandard(model_interaction), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+qqline(rstandard(model_interaction), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+par(mfrow=c(1,1))
+```
+
+```{r}
+library(MASS)
+boxcox(model_interaction)
+```
+
+```{r}
+# Log FEV
+model_interaction_log = lm(log(new_fev_data$FEV)~Age_standardized+Hgt_m_standardized+sex_factor+smoke_factor+Age_standardized*Hgt_m_standardized)
+
+# Summary of model
+summary(model_interaction_log)
+
+# Anova table
+anova(model_interaction_log)
+
+par(mfrow=c(2,2))
+# fitted values v.s. standardized residuals
+plot(model_interaction_log$fitted.values,rstandard(model_interaction_log))
+abline(h=0)
+
+# Age v.s. standardized residuals
+plot(new_fev_data$Age,rstandard(model_interaction_log))
+abline(h=0)
+
+# Hgt_m v.s. standardized residuals
+plot(new_fev_data$Hgt_m,rstandard(model_interaction_log))
+abline(h=0)
+
+qqnorm(rstandard(model_interaction_log), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+qqline(rstandard(model_interaction_log), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+par(mfrow=c(1,1))
+```
+
+```{r}
+# Log FEV without interaction term
+model_log = lm(log(new_fev_data$FEV)~Age_standardized+Hgt_m_standardized+sex_factor+smoke_factor)
+
+# Summary of model
+summary(model_log)
+
+# Anova table
+anova(model_log)
+
+par(mfrow=c(2,2))
+# fitted values v.s. standardized residuals
+plot(model_log$fitted.values,rstandard(model_log))
+abline(h=0)
+
+# Age v.s. standardized residuals
+plot(new_fev_data$Age,rstandard(model_log))
+abline(h=0)
+
+# Hgt_m v.s. standardized residuals
+plot(new_fev_data$Hgt_m,rstandard(model_log))
+abline(h=0)
+
+qqnorm(rstandard(model_log), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+qqline(rstandard(model_log), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+par(mfrow=c(1,1))
+```
+
+```{r}
+library(car)
+boxTidwell(log(FEV)~Age+Hgt_m,other.x=~sex_factor+smoke_factor, data=new_fev_data)
+```
+
+```{r}
+# Transformation on X: sqrt Height
+model_log_sqrt = lm(log(FEV)~Age+I(sqrt(Hgt_m))+sex_factor+smoke_factor, data=new_fev_data)
+
+# Summary of model
+summary(model_log_sqrt)
+
+# Anova table
+anova(model_log_sqrt)
+
+par(mfrow=c(2,2))
+# fitted values v.s. standardized residuals
+plot(model_log_sqrt$fitted.values,rstandard(model_log_sqrt))
+abline(h=0)
+
+# Age v.s. standardized residuals
+plot(new_fev_data$Age,rstandard(model_log_sqrt))
+abline(h=0)
+
+# Hgt_m v.s. standardized residuals
+plot(new_fev_data$Hgt_m,rstandard(model_log_sqrt))
+abline(h=0)
+
+qqnorm(rstandard(model_log_sqrt), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+qqline(rstandard(model_log_sqrt), datax=TRUE, xlab = 'z-score',ylab='standardized residuals')
+par(mfrow=c(1,1))
+```
+
+```{r}
+par(mfrow=c(1,2))
+# Before and after: FEV~Age to log(FEV)~Age
+plot(new_fev_data$Age,new_fev_data$FEV)
+plot(new_fev_data$Age,log(new_fev_data$FEV))
+
+# Before and after: FEV~Height to log(FEV)~sqrt(Height)
+plot(new_fev_data$Hgt_m,new_fev_data$FEV)
+plot(sqrt(new_fev_data$Hgt_m),log(new_fev_data$FEV))
+par(mfrow=c(1,1))
+```
+
+
+```{r}
+Age = new_fev_data$Age
+Height_m_sqrt = I(sqrt(new_fev_data$Hgt_m))
+x = cbind(Age,Height_m_sqrt)
+x_prime_x = cor(x)
+x_prime_x # correlation matrix
+Cjj = solve(x_prime_x) # Cjj
+diag(Cjj) # VIF 
+max(eigen(x_prime_x)$values)/min(eigen(x_prime_x)$values)
+```
+
